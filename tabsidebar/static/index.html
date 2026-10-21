@@ -1,0 +1,392 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Tab Folders</title>
+<style>
+  :root {
+    --bg: #f6f6f6; --fg: #222; --muted: #888; --hover: #e4e4e4;
+    --drop: #cfe3ff; --accent: #2f6fdd; --working: #e0823d; --idle: #2fa36b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1e1e1e; --fg: #ddd; --muted: #888; --hover: #2d2d2d; --drop: #23406b; --accent: #6ea2ff; --working: #f0a35e; --idle: #4cc38a; }
+  }
+  body { margin: 0; padding: 10px 10px 10px 16px; background: var(--bg); color: var(--fg);
+         font: 14px -apple-system, system-ui, sans-serif; user-select: none; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  header button { background: none; border: 1px solid var(--muted); color: var(--fg);
+                  border-radius: 5px; font-size: 12px; padding: 3px 8px; cursor: pointer; }
+  #status { color: var(--muted); font-size: 12px; }
+  .folder-row, .tab-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px;
+                          border-radius: 5px; cursor: default; white-space: nowrap; }
+  .folder-row:hover, .tab-row:hover { background: var(--hover); }
+  .folder-row .name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .folder-row .count { color: var(--muted); }
+  .folder-row .action { visibility: hidden; color: var(--muted); cursor: pointer; padding: 0 2px; }
+  .folder-row:hover .action { visibility: visible; }
+  .folder-row .action:hover { color: var(--fg); }
+  .header-actions { display: flex; gap: 4px; }
+  .caret { width: 16px; height: 16px; flex: none; display: flex; align-items: center; justify-content: center; }
+  .caret::before { content: ""; width: 7px; height: 7px; margin-top: -4px; border: solid var(--muted);
+                   border-width: 0 2px 2px 0; transform: rotate(45deg); transition: transform 0.12s; }
+  .collapsed > .folder-row .caret::before { margin-top: 0; margin-left: -3px; transform: rotate(-45deg); }
+  .tabs { padding-left: 28px; }
+  .tab-row { cursor: pointer; }
+  .tab-row .title { overflow: hidden; text-overflow: ellipsis; }
+  .status { width: 14px; flex: none; display: flex; justify-content: center; color: var(--muted); }
+  .status.plain::before { content: "▭"; }
+  .status.working::before, .status.idle::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%; }
+  .status.working::before { background: var(--working); animation: pulse 1.2s ease-in-out infinite;
+                             animation-delay: var(--pulse-delay, 0ms); }
+  .status.idle::before { background: var(--idle); }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.7); }
+  }
+  .drop-target > .folder-row, .tab-row.drop-target { background: var(--drop); }
+  .collapsed > .tabs { display: none; }
+  input.rename { font: inherit; font-weight: 600; flex: 1; min-width: 0; }
+  .swatch { width: 11px; height: 11px; border-radius: 50%; flex: none; cursor: pointer;
+            box-shadow: inset 0 0 0 1.5px var(--muted); }
+  .swatch.filled { box-shadow: none; }
+  .palette { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 6px 8px 24px; }
+  .palette .swatch { width: 18px; height: 18px; }
+  .palette .swatch.selected { outline: 2px solid var(--fg); outline-offset: 1px; }
+  .folder[style*="--folder-color"] > .tabs { box-shadow: inset 2px 0 0 var(--folder-color); }
+  body { padding-bottom: 52px; } /* room for the settings button */
+  #settings-button { position: fixed; right: 10px; bottom: 10px; width: 30px; height: 30px; border-radius: 50%;
+                     border: 1px solid var(--muted); background: var(--bg); color: var(--fg); font-size: 19px;
+                     line-height: 1; padding: 0; cursor: pointer; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15); }
+  #settings-button:hover, #settings-button[aria-expanded="true"] { background: var(--hover); }
+  #settings-panel { position: fixed; right: 10px; bottom: 48px; width: min(240px, calc(100vw - 20px));
+                    box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--muted); border-radius: 8px;
+                    background: var(--bg); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); }
+  #settings-panel h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+                       color: var(--muted); }
+  .setting { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+  .setting-group + .setting-group { margin-top: 12px; }
+  .setting-label { font-size: 13px; margin-bottom: 6px; }
+  .segmented { display: flex; border: 1px solid var(--muted); border-radius: 6px; overflow: hidden; }
+  .segmented button { flex: 1; border: none; background: none; color: var(--fg); font: inherit; font-size: 12px;
+                      padding: 4px 6px; cursor: pointer; }
+  .segmented button + button { border-left: 1px solid var(--muted); }
+  .segmented button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .custom-swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .custom-swatches .swatch { width: 18px; height: 18px; }
+  .custom-swatches .swatch.selected { outline: 2px solid var(--fg); outline-offset: 1px; }
+  .custom-editor { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .custom-editor input[type="color"] { width: 28px; height: 22px; padding: 0; border: none; background: none; }
+  .custom-editor input[type="text"] { width: 76px; font: inherit; font-size: 12px; }
+  .custom-editor input[type="text"][aria-invalid="true"] { outline: 1px solid #e5534b; }
+  .link-button { border: none; background: none; color: var(--accent); font: inherit; font-size: 12px;
+                 padding: 0; margin-top: 8px; cursor: pointer; }
+</style>
+</head>
+<body>
+<header>
+  <span id="status">connecting…</span>
+  <span class="header-actions">
+    <button id="new-folder" title="New folder">+ Folder</button>
+  </span>
+</header>
+<div id="tree"></div>
+<div id="settings-panel" role="dialog" aria-label="Settings" hidden>
+  <h2>Settings</h2>
+  <div class="setting-group">
+    <div class="setting-label">Folder colours</div>
+    <div class="segmented" role="group" aria-label="Folder colour palette">
+      <button data-palette="default" aria-pressed="false">Default</button>
+      <button data-palette="custom" aria-pressed="false">Custom</button>
+    </div>
+    <div id="custom-palette" hidden>
+      <div class="custom-swatches" id="custom-swatches"></div>
+      <div class="custom-editor" id="custom-editor" hidden>
+        <input type="color" id="custom-picker" title="Pick a colour">
+        <input type="text" id="custom-hex" maxlength="7" placeholder="#rrggbb" spellcheck="false" title="Hex colour">
+      </div>
+      <button class="link-button" id="reset-palette">Reset to default</button>
+    </div>
+  </div>
+  <div class="setting-group">
+    <label class="setting" title="Give each iTerm2 tab its folder's colour">
+      <input type="checkbox" id="color-tabs"> Colour iTerm tabs by folder
+    </label>
+  </div>
+</div>
+<button id="settings-button" title="Settings" aria-controls="settings-panel" aria-expanded="false">⚙</button>
+<script>
+const params = new URLSearchParams(location.search);
+// A private type, so text dragged in from other apps is not mistaken for a tab.
+const DRAG_TYPE = "application/x-tabsidebar-key";
+const COLLAPSED_KEY = "tabsidebar.collapsed";
+const treeEl = document.getElementById("tree");
+const statusEl = document.getElementById("status");
+const colorTabsEl = document.getElementById("color-tabs");
+const HEX = /^#[0-9a-fA-F]{6}$/;
+let ws;
+let folders = [];
+let collapsed = new Set(loadCollapsed());
+let editingFolderId = null;
+let dragging = false;
+let paletteFolderId = null;
+let palette = { name: "default", colors: [], default: [], custom: [] };
+let customSlot = null; // the custom-palette slot being edited
+
+function loadCollapsed() {
+  try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY)) || []; } catch { return []; }
+}
+function saveCollapsed() {
+  try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed])); } catch {}
+}
+
+function send(command) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(command));
+}
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws?token=${encodeURIComponent(params.get("token") || "")}`);
+  ws.onopen = () => { statusEl.textContent = ""; };
+  ws.onmessage = (event) => {
+    let message;
+    try { message = JSON.parse(event.data); } catch { return; }
+    if (message.type === "tree") {
+      folders = message.folders;
+      colorTabsEl.checked = message.color_tabs;
+      palette = message.palette;
+      renderSettings();
+      render();
+    }
+  };
+  ws.onclose = () => { statusEl.textContent = "disconnected — retrying…"; setTimeout(connect, 1000); };
+}
+
+function render() {
+  // Re-rendering would discard an in-progress rename or cancel a drag; both re-render when they end.
+  if (editingFolderId || dragging) return;
+  treeEl.replaceChildren(...folders.map(renderFolder));
+}
+
+function renderFolder(folder) {
+  const el = document.createElement("div");
+  el.className = "folder" + (collapsed.has(folder.id) ? " collapsed" : "");
+
+  const row = document.createElement("div");
+  row.className = "folder-row";
+  const caret = span("caret", "");
+  const name = span("name", folder.name);
+  row.append(caret);
+  if (folder.editable) row.append(renderSwatch(folder));
+  row.append(name, span("count", folder.tabs.length));
+  if (folder.color) el.style.setProperty("--folder-color", folder.color);
+  const toggleCollapsed = () => {
+    const isCollapsed = !collapsed.has(folder.id);
+    isCollapsed ? collapsed.add(folder.id) : collapsed.delete(folder.id);
+    saveCollapsed();
+    // Toggle in place: re-rendering would replace the row between the two clicks of a double-click.
+    el.classList.toggle("collapsed", isCollapsed);
+  };
+  if (folder.editable) {
+    const edit = span("action", "✎");
+    edit.title = "Rename folder";
+    edit.onclick = (e) => { e.stopPropagation(); startRename(folder, name); };
+    const del = span("action", "×");
+    del.title = "Delete folder (tabs move to Unsorted)";
+    del.onclick = (e) => { e.stopPropagation(); send({ action: "delete_folder", folder_id: folder.id }); };
+    row.append(edit, del);
+    name.ondblclick = (e) => {
+      e.stopPropagation();
+      toggleCollapsed(); // undo the toggle from the double-click's first click
+      startRename(folder, name);
+    };
+  }
+  row.onclick = (e) => { if (e.detail <= 1) toggleCollapsed(); };
+  makeDropTarget(el, folder.id, null);
+
+  const tabs = document.createElement("div");
+  tabs.className = "tabs";
+  folder.tabs.forEach((tab) => tabs.append(renderTab(folder, tab)));
+  el.append(row);
+  if (paletteFolderId === folder.id) el.append(renderPalette(folder));
+  el.append(tabs);
+  return el;
+}
+
+function renderSwatch(folder) {
+  const swatch = span("swatch" + (folder.color ? " filled" : ""), "");
+  if (folder.color) swatch.style.background = folder.color;
+  swatch.title = "Folder colour";
+  swatch.onclick = (e) => {
+    e.stopPropagation();
+    paletteFolderId = paletteFolderId === folder.id ? null : folder.id;
+    render();
+  };
+  return swatch;
+}
+
+function renderPalette(folder) {
+  const picker = document.createElement("div");
+  picker.className = "palette";
+  const choose = (slot) => {
+    paletteFolderId = null;
+    send({ action: "set_folder_color", folder_id: folder.id, slot });
+  };
+  palette.colors.forEach((color, slot) => {
+    const swatch = span("swatch filled" + (slot === folder.color_slot ? " selected" : ""), "");
+    swatch.style.background = color;
+    swatch.onclick = () => choose(slot);
+    picker.append(swatch);
+  });
+  const none = span("swatch" + (folder.color_slot === null ? " selected" : ""), "");
+  none.title = "No colour";
+  none.onclick = () => choose(null);
+  picker.append(none);
+  return picker;
+}
+
+const PULSE_MS = 1200;
+const STATUS_LABELS = { working: "Claude is working", idle: "Claude is waiting for you" };
+
+function renderStatus(status) {
+  const el = span("status " + (status || "plain"), "");
+  if (status) el.title = STATUS_LABELS[status];
+  // Rows are rebuilt on every spinner frame; a clock-based delay keeps the pulse continuous across rebuilds.
+  if (status === "working") el.style.setProperty("--pulse-delay", `-${Date.now() % PULSE_MS}ms`);
+  return el;
+}
+
+function renderTab(folder, tab) {
+  const row = document.createElement("div");
+  row.className = "tab-row";
+  row.draggable = true;
+  row.title = tab.title;
+  row.append(renderStatus(tab.status), span("title", tab.title || "(untitled)"));
+  row.onclick = () => send({ action: "activate", tab_id: tab.tab_id });
+  row.ondragstart = (e) => { dragging = true; e.dataTransfer.setData(DRAG_TYPE, tab.key); };
+  row.ondragend = () => { dragging = false; render(); };
+  // Dropping onto a tab inserts before it, so a drag can reorder within a folder.
+  makeDropTarget(row, folder.id, tab.key);
+  return row;
+}
+
+function makeDropTarget(el, folderId, beforeKey) {
+  el.ondragover = (e) => { e.preventDefault(); e.stopPropagation(); el.classList.add("drop-target"); };
+  el.ondragleave = () => el.classList.remove("drop-target");
+  el.ondrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    el.classList.remove("drop-target");
+    const key = e.dataTransfer.getData(DRAG_TYPE);
+    if (key) send({ action: "move_tab", key, folder_id: folderId, before_key: beforeKey });
+  };
+}
+
+function startRename(folder, nameEl) {
+  editingFolderId = folder.id;
+  const input = document.createElement("input");
+  input.className = "rename";
+  input.value = folder.name;
+  const finish = (commit) => {
+    if (editingFolderId !== folder.id) return;
+    editingFolderId = null;
+    const name = input.value.trim();
+    if (commit && name && name !== folder.name) send({ action: "rename_folder", folder_id: folder.id, name });
+    render();
+  };
+  input.onkeydown = (e) => {
+    if (e.key === "Enter") finish(true);
+    if (e.key === "Escape") finish(false);
+  };
+  input.onblur = () => finish(true);
+  input.onclick = (e) => e.stopPropagation();
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+function span(className, text) {
+  const el = document.createElement("span");
+  el.className = className;
+  el.textContent = text;
+  return el;
+}
+
+
+colorTabsEl.onchange = () => send({ action: "set_color_tabs", enabled: colorTabsEl.checked });
+
+const paletteButtons = document.querySelectorAll("[data-palette]");
+const customPaletteEl = document.getElementById("custom-palette");
+const customSwatchesEl = document.getElementById("custom-swatches");
+const customEditorEl = document.getElementById("custom-editor");
+const customPickerEl = document.getElementById("custom-picker");
+const customHexEl = document.getElementById("custom-hex");
+
+function renderSettings() {
+  for (const button of paletteButtons) {
+    button.setAttribute("aria-pressed", String(button.dataset.palette === palette.name));
+  }
+  customPaletteEl.hidden = palette.name !== "custom";
+  customSwatchesEl.replaceChildren(...palette.custom.map((color, slot) => {
+    const swatch = span("swatch filled" + (slot === customSlot ? " selected" : ""), "");
+    swatch.style.background = color;
+    swatch.title = `Edit colour ${slot + 1}`;
+    swatch.onclick = () => { customSlot = slot; renderSettings(); };
+    return swatch;
+  }));
+  customEditorEl.hidden = customSlot === null;
+  // Leave the fields alone while they are being edited, so an update from the server does not overwrite typing.
+  if (customSlot !== null && !customEditorEl.contains(document.activeElement)) {
+    customPickerEl.value = palette.custom[customSlot];
+    customHexEl.value = palette.custom[customSlot];
+    customHexEl.removeAttribute("aria-invalid");
+  }
+}
+
+function saveCustomColor(color) {
+  if (customSlot === null) return;
+  if (!HEX.test(color)) { customHexEl.setAttribute("aria-invalid", "true"); return; }
+  customHexEl.removeAttribute("aria-invalid");
+  color = color.toLowerCase();
+  if (color !== palette.custom[customSlot]) {
+    send({ action: "set_custom_color", slot: customSlot, color });
+    palette.custom[customSlot] = color; // so Enter followed by blur does not send it twice
+  }
+}
+
+for (const button of paletteButtons) {
+  button.onclick = () => {
+    if (button.dataset.palette !== palette.name) send({ action: "set_palette", name: button.dataset.palette });
+  };
+}
+customPickerEl.onchange = () => { customHexEl.value = customPickerEl.value; saveCustomColor(customPickerEl.value); };
+customHexEl.onkeydown = (e) => { if (e.key === "Enter") saveCustomColor(customHexEl.value.trim()); };
+customHexEl.onblur = () => saveCustomColor(customHexEl.value.trim());
+document.getElementById("reset-palette").onclick = () => {
+  customSlot = null;
+  send({ action: "reset_custom_palette" });
+};
+
+const settingsPanelEl = document.getElementById("settings-panel");
+const settingsButtonEl = document.getElementById("settings-button");
+function setSettingsOpen(open) {
+  settingsPanelEl.hidden = !open;
+  settingsButtonEl.setAttribute("aria-expanded", String(open));
+}
+settingsButtonEl.onclick = () => setSettingsOpen(settingsPanelEl.hidden);
+document.addEventListener("click", (e) => {
+  // composedPath, not contains: a click inside the panel can re-render the element that was clicked.
+  const path = e.composedPath();
+  if (!settingsPanelEl.hidden && !path.includes(settingsPanelEl) && !path.includes(settingsButtonEl)) {
+    setSettingsOpen(false);
+  }
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") setSettingsOpen(false); });
+
+document.getElementById("new-folder").onclick = () => {
+  send({ action: "create_folder", name: "New folder" });
+};
+
+connect();
+</script>
+</body>
+</html>

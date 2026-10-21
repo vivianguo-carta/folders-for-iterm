@@ -1,0 +1,122 @@
+import asyncio
+
+import pytest
+
+from fakes import FakeApp, FakeColorizer, FakeTab, RecordingClient, SidebarWithoutWatchers
+from tabsidebar.model import FolderStore
+from tabsidebar.sidebar import BadCommand
+
+
+def make_sidebar(tmp_path, *tabs):
+    return SidebarWithoutWatchers(
+        connection=None,
+        app=FakeApp(*tabs),
+        store=FolderStore(tmp_path / "state.json"),
+        colorizer=FakeColorizer(),
+    )
+
+
+async def refresh_once(sidebar):
+    sidebar.mark_dirty()
+    loop = asyncio.create_task(sidebar.run_refresh_loop())
+    await asyncio.sleep(0.05)
+    loop.cancel()
+
+
+def tab_titles(message):
+    return [t["title"] for f in message["folders"] for t in f["tabs"]]
+
+
+def test_refresh_loop_keeps_running_after_a_failed_refresh(tmp_path):
+    flaky = FakeTab("1", "-zsh")
+    flaky.fail_next_read = True
+    sidebar = make_sidebar(tmp_path, flaky)
+
+    async def scenario():
+        loop = asyncio.create_task(sidebar.run_refresh_loop())
+        sidebar.mark_dirty()
+        await asyncio.sleep(0.05)
+        sidebar.mark_dirty()
+        await asyncio.sleep(0.05)
+        loop.cancel()
+        return [t.title for t in sidebar.live]
+
+    assert asyncio.run(scenario()) == ["-zsh"]
+
+
+def test_a_failing_client_is_dropped_without_starving_the_others(tmp_path):
+    sidebar = make_sidebar(tmp_path, FakeTab("1", "-zsh"))
+    closing, healthy = RecordingClient(fail=True), RecordingClient()
+
+    async def scenario():
+        await sidebar.add_client(closing)
+        await sidebar.add_client(healthy)
+        await refresh_once(sidebar)
+        await sidebar.handle_command({"action": "create_folder", "name": "api"})
+
+    asyncio.run(scenario())
+
+    assert closing not in sidebar._clients
+    assert [m["folders"][0]["name"] for m in healthy.messages][-1] == "api"
+
+
+def test_a_spinner_frame_does_not_resend_an_unchanged_tree(tmp_path):
+    claude = FakeTab("1", "◐ Fix login (node)")
+    sidebar = make_sidebar(tmp_path, claude)
+    client = RecordingClient()
+
+    async def scenario():
+        await refresh_once(sidebar)
+        await sidebar.add_client(client)
+        sidebar._titles_by_tab_id["1"] = "◑ Fix login (node)"  # what the title watcher records
+        await refresh_once(sidebar)
+
+    asyncio.run(scenario())
+
+    assert [tab_titles(m) for m in client.messages] == [["Fix login"]]
+
+
+def test_moving_a_key_that_is_not_an_open_tab_is_rejected(tmp_path):
+    sidebar = make_sidebar(tmp_path, FakeTab("1", "-zsh"))
+
+    async def scenario():
+        await refresh_once(sidebar)
+        folder = sidebar.store.create_folder("api")
+        with pytest.raises(BadCommand):
+            await sidebar.handle_command({"action": "move_tab", "key": "dragged text", "folder_id": folder.id})
+
+    asyncio.run(scenario())
+
+    assert sidebar.store.folders[0].tab_keys == []
+
+
+@pytest.mark.parametrize("command", [[], "x", {"action": "rm -rf"}, {"action": "rename_folder"}])
+def test_malformed_commands_are_rejected_as_bad_commands(tmp_path, command):
+    sidebar = make_sidebar(tmp_path)
+
+    with pytest.raises(BadCommand):
+        asyncio.run(sidebar.handle_command(command))
+
+
+def test_publishes_from_commands_and_refreshes_never_overlap(tmp_path):
+    sidebar = make_sidebar(tmp_path, FakeTab("1", "-zsh"))
+
+    async def scenario():
+        await asyncio.gather(
+            refresh_once(sidebar),
+            sidebar.handle_command({"action": "set_color_tabs", "enabled": True}),
+            sidebar.handle_command({"action": "create_folder", "name": "api"}),
+        )
+
+    asyncio.run(scenario())
+
+    assert sidebar.colorizer.max_in_flight == 1
+
+
+def test_activate_switches_to_the_clicked_tab(tmp_path):
+    tab = FakeTab("1", "-zsh")
+    sidebar = make_sidebar(tmp_path, tab)
+
+    asyncio.run(sidebar.handle_command({"action": "activate", "tab_id": "1"}))
+
+    assert tab.activated
