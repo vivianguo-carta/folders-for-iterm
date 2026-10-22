@@ -35,8 +35,9 @@ Group your iTerm2 tabs into folders, in a sidebar that lives in iTerm2's Toolbel
   Unsorted always follows iTerm2's tab order.
 - Click the dot next to a folder's name to give it a colour.
 - **⚙** at the bottom right opens settings:
-  - **Folder colours** switches between the **Default** palette and a **Custom** one. With Custom selected, click a
-    colour to change it with the picker or a `#rrggbb` value; **Reset to default** starts over. A folder remembers
+  - **Folder colours** switches between the **Default** palette and a **Custom** one, and shows the selected
+    palette's colours. With Custom selected, click a colour to change it with the picker or a `#rrggbb` value;
+    **Reset to default** starts over. A folder remembers
     its position in the palette, so switching palettes or editing a colour re-tints every folder that uses it.
   - **Colour iTerm tabs by folder** gives each tab in a coloured folder that colour in iTerm2's tab bar.
     Turning it off, or moving the tab out of the folder, restores the tab's own colour.

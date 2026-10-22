@@ -75,6 +75,7 @@
   .custom-swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .custom-swatches .swatch { width: 18px; height: 18px; }
   .custom-swatches .swatch.selected { outline: 2px solid var(--fg); outline-offset: 1px; }
+  .custom-swatches.read-only .swatch { cursor: default; }
   .custom-editor { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
   .custom-editor input[type="color"] { width: 28px; height: 22px; padding: 0; border: none; background: none; }
   .custom-editor input[type="text"] { width: 76px; font: inherit; font-size: 12px; }
@@ -99,8 +100,8 @@
       <button data-palette="default" aria-pressed="false">Default</button>
       <button data-palette="custom" aria-pressed="false">Custom</button>
     </div>
+    <div class="custom-swatches" id="custom-swatches"></div>
     <div id="custom-palette" hidden>
-      <div class="custom-swatches" id="custom-swatches"></div>
       <div class="custom-editor" id="custom-editor" hidden>
         <input type="color" id="custom-picker" title="Pick a colour">
         <input type="text" id="custom-hex" maxlength="7" placeholder="#rrggbb" spellcheck="false" title="Hex colour">
@@ -325,12 +326,15 @@ function renderSettings() {
   for (const button of paletteButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.palette === palette.name));
   }
-  customPaletteEl.hidden = palette.name !== "custom";
-  customSwatchesEl.replaceChildren(...palette.custom.map((color, slot) => {
-    const swatch = span("swatch filled" + (slot === customSlot ? " selected" : ""), "");
+  const editable = palette.name === "custom";
+  customPaletteEl.hidden = !editable;
+  customSwatchesEl.classList.toggle("read-only", !editable);
+  // Default shows its colours as a preview; only Custom's can be edited.
+  customSwatchesEl.replaceChildren(...(editable ? palette.custom : palette.default).map((color, slot) => {
+    const swatch = span("swatch filled" + (editable && slot === customSlot ? " selected" : ""), "");
     swatch.style.background = color;
-    swatch.title = `Edit colour ${slot + 1}`;
-    swatch.onclick = () => { customSlot = slot; renderSettings(); };
+    swatch.title = editable ? `Edit colour ${slot + 1}` : `Default colour ${slot + 1}`;
+    if (editable) swatch.onclick = () => { customSlot = slot; renderSettings(); };
     return swatch;
   }));
   customEditorEl.hidden = customSlot === null;
