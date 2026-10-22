@@ -60,7 +60,8 @@ async def async_main(connection: iterm2.Connection) -> None:
         log.error("port %s is in use; is tabsidebar already running (for example as the login agent)?", PORT)
         raise SystemExit(1) from error
 
-    await register_toolbelt_tool(connection, f"{ORIGIN}/?token={token}")
+    # The version in the link means a web view can never show a copy of the page cached by an older run.
+    await register_toolbelt_tool(connection, f"{ORIGIN}/?token={token}&v={page_version()}")
     sidebar.mark_dirty()
     await asyncio.gather(
         sidebar.run_refresh_loop(),
