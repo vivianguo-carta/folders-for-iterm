@@ -14,18 +14,32 @@ Group your iTerm2 tabs into folders, in a sidebar that lives in iTerm2's Toolbel
 
 ## Install
 
+You only do this once. After that the sidebar starts by itself at login and whenever iTerm2 relaunches, with no
+terminal left running.
+
 1. Install the `tabsidebar` command:
    ```sh
-   uv tool install git+https://github.com/<your-github-user>/tabsidebar
+   uv tool install git+https://github.com/vvscribbles/folders-for-iterm
    ```
 2. In iTerm2, turn on **Settings → General → Magic → Enable Python API**.
-3. Start it at login, so it is always there when iTerm2 is:
+3. Install the login agent, which starts the sidebar now and keeps it running:
    ```sh
    tabsidebar install-agent
    ```
-   Or run `tabsidebar` in a terminal to try it first; it stops when you close that terminal or quit iTerm2.
    The first time, macOS or iTerm2 may ask you to allow it to control iTerm2. Allow it.
 4. In iTerm2, open **View → Toolbelt → Show Toolbelt**, then check **Tab Folders** in the same submenu.
+
+To try it without the agent, run `tabsidebar` in a terminal instead of step 3. It stops when you close that
+terminal or quit iTerm2. Stop it before installing the agent, or the agent finds port 47821 in use.
+
+## Update
+
+The agent runs the installed copy, so reinstall it and restart the agent:
+
+```sh
+uv tool install --reinstall git+https://github.com/vvscribbles/folders-for-iterm
+tabsidebar install-agent
+```
 
 ## Using it
 
@@ -82,7 +96,7 @@ rm -rf ~/Library/Application\ Support/tabsidebar
 ## Development
 
 ```sh
-git clone https://github.com/<your-github-user>/tabsidebar && cd tabsidebar
+git clone https://github.com/vvscribbles/folders-for-iterm && cd folders-for-iterm
 uv run tabsidebar   # run from the checkout
 uv run pytest       # tests
 ```
