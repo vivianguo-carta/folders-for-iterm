@@ -120,3 +120,34 @@ def test_activate_switches_to_the_clicked_tab(tmp_path):
     asyncio.run(sidebar.handle_command({"action": "activate", "tab_id": "1"}))
 
     assert tab.activated
+
+
+def test_renaming_a_tab_sets_its_iterm_title(tmp_path):
+    tab = FakeTab("1", "-zsh")
+    sidebar = make_sidebar(tmp_path, tab)
+
+    asyncio.run(sidebar.handle_command({"action": "rename_tab", "tab_id": "1", "title": "api server"}))
+
+    assert tab.title_override == "api server"
+
+
+def test_a_backslash_in_a_new_tab_title_is_kept_literally(tmp_path):
+    # iTerm2 would otherwise read \(x) as an expression to interpolate.
+    tab = FakeTab("1", "-zsh")
+    sidebar = make_sidebar(tmp_path, tab)
+
+    asyncio.run(sidebar.handle_command({"action": "rename_tab", "tab_id": "1", "title": "C:\\temp \\(x)"}))
+
+    assert tab.title_override == "C:\\\\temp \\\\(x)"
+
+
+@pytest.mark.parametrize("command", [
+    {"action": "rename_tab", "tab_id": "closed", "title": "x"},
+    {"action": "rename_tab", "tab_id": "1", "title": 42},
+    {"action": "rename_tab", "tab_id": "1", "title": "x" * 201},
+])
+def test_bad_tab_renames_are_rejected(tmp_path, command):
+    sidebar = make_sidebar(tmp_path, FakeTab("1", "-zsh"))
+
+    with pytest.raises(BadCommand):
+        asyncio.run(sidebar.handle_command(command))

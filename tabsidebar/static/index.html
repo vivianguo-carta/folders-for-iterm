@@ -20,9 +20,10 @@
   .folder-row, .tab-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px;
                           border-radius: 5px; cursor: default; white-space: nowrap; }
   .folder-row:hover, .tab-row:hover { background: var(--hover); }
-  .folder-row .name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; }
-  .folder-row .count { color: var(--muted); }
-  .folder-row .action { visibility: hidden; color: var(--muted); cursor: pointer; padding: 0 2px; }
+  .folder-row .name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* Last in every row, Unsorted included, so the counts line up on the right edge. */
+  .folder-row .count { order: 1; flex: none; min-width: 2ch; text-align: right; color: var(--muted); }
+  .folder-row .action { flex: none; visibility: hidden; color: var(--muted); cursor: pointer; padding: 0 2px; }
   .folder-row:hover .action { visibility: visible; }
   .folder-row .action:hover { color: var(--fg); }
   .header-actions { display: flex; gap: 4px; }
@@ -47,6 +48,7 @@
   .drop-target > .folder-row, .tab-row.drop-target { background: var(--drop); }
   .collapsed > .tabs { display: none; }
   input.rename { font: inherit; font-weight: 600; flex: 1; min-width: 0; }
+  .tab-row input.rename { font-weight: normal; }
   .swatch { width: 11px; height: 11px; border-radius: 50%; flex: none; cursor: pointer;
             box-shadow: inset 0 0 0 1.5px var(--muted); }
   .swatch.filled { box-shadow: none; }
@@ -117,6 +119,7 @@
 </div>
 <button id="settings-button" title="Settings" aria-controls="settings-panel" aria-expanded="false">⚙</button>
 <script>
+const PAGE_VERSION = "__PAGE_VERSION__"; // filled in by the server
 const params = new URLSearchParams(location.search);
 // A private type, so text dragged in from other apps is not mistaken for a tab.
 const DRAG_TYPE = "application/x-tabsidebar-key";
@@ -128,7 +131,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 let ws;
 let folders = [];
 let collapsed = new Set(loadCollapsed());
-let editingFolderId = null;
+let editing = null; // what an inline rename box is open for, e.g. "folder:<id>" or "tab:<id>"
 let dragging = false;
 let paletteFolderId = null;
 let palette = { name: "default", colors: [], default: [], custom: [] };
@@ -152,6 +155,10 @@ function connect() {
     let message;
     try { message = JSON.parse(event.data); } catch { return; }
     if (message.type === "tree") {
+      if (message.page_version && message.page_version !== PAGE_VERSION) {
+        location.reload(); // the page file changed since this copy loaded
+        return;
+      }
       folders = message.folders;
       colorTabsEl.checked = message.color_tabs;
       palette = message.palette;
@@ -164,7 +171,7 @@ function connect() {
 
 function render() {
   // Re-rendering would discard an in-progress rename or cancel a drag; both re-render when they end.
-  if (editingFolderId || dragging) return;
+  if (editing || dragging) return;
   treeEl.replaceChildren(...folders.map(renderFolder));
 }
 
@@ -190,7 +197,12 @@ function renderFolder(folder) {
   if (folder.editable) {
     const edit = span("action", "✎");
     edit.title = "Rename folder";
-    edit.onclick = (e) => { e.stopPropagation(); startRename(folder, name); };
+    edit.onclick = (e) => {
+      e.stopPropagation();
+      startRename(name, `folder:${folder.id}`, folder.name, (value) => {
+        if (value) send({ action: "rename_folder", folder_id: folder.id, name: value });
+      });
+    };
     const del = span("action", "×");
     del.title = "Delete folder (tabs move to Unsorted)";
     del.onclick = (e) => { e.stopPropagation(); send({ action: "delete_folder", folder_id: folder.id }); };
@@ -198,7 +210,9 @@ function renderFolder(folder) {
     name.ondblclick = (e) => {
       e.stopPropagation();
       toggleCollapsed(); // undo the toggle from the double-click's first click
-      startRename(folder, name);
+      startRename(name, `folder:${folder.id}`, folder.name, (value) => {
+        if (value) send({ action: "rename_folder", folder_id: folder.id, name: value });
+      });
     };
   }
   row.onclick = (e) => { if (e.detail <= 1) toggleCollapsed(); };
@@ -260,9 +274,17 @@ function renderTab(folder, tab) {
   const row = document.createElement("div");
   row.className = "tab-row";
   row.draggable = true;
-  row.title = tab.title;
-  row.append(renderStatus(tab.status), span("title", tab.title || "(untitled)"));
-  row.onclick = () => send({ action: "activate", tab_id: tab.tab_id });
+  row.title = `${tab.title}\nDouble-click to rename`;
+  const title = span("title", tab.title || "(untitled)");
+  row.append(renderStatus(tab.status), title);
+  row.onclick = (e) => { if (e.detail <= 1) send({ action: "activate", tab_id: tab.tab_id }); };
+  row.ondblclick = () => {
+    row.draggable = false; // so dragging inside the box selects text instead of moving the tab
+    // An empty title hands the tab back to iTerm2's own title.
+    startRename(title, `tab:${tab.tab_id}`, tab.title, (value) => {
+      send({ action: "rename_tab", tab_id: tab.tab_id, title: value });
+    });
+  };
   row.ondragstart = (e) => { dragging = true; e.dataTransfer.setData(DRAG_TYPE, tab.key); };
   row.ondragend = () => { dragging = false; render(); };
   // Dropping onto a tab inserts before it, so a drag can reorder within a folder.
@@ -282,16 +304,16 @@ function makeDropTarget(el, folderId, beforeKey) {
   };
 }
 
-function startRename(folder, nameEl) {
-  editingFolderId = folder.id;
+function startRename(textEl, editKey, current, onCommit) {
+  editing = editKey;
   const input = document.createElement("input");
   input.className = "rename";
-  input.value = folder.name;
+  input.value = current;
   const finish = (commit) => {
-    if (editingFolderId !== folder.id) return;
-    editingFolderId = null;
-    const name = input.value.trim();
-    if (commit && name && name !== folder.name) send({ action: "rename_folder", folder_id: folder.id, name });
+    if (editing !== editKey) return;
+    editing = null;
+    const value = input.value.trim();
+    if (commit && value !== current) onCommit(value);
     render();
   };
   input.onkeydown = (e) => {
@@ -300,7 +322,7 @@ function startRename(folder, nameEl) {
   };
   input.onblur = () => finish(true);
   input.onclick = (e) => e.stopPropagation();
-  nameEl.replaceWith(input);
+  textEl.replaceWith(input);
   input.focus();
   input.select();
 }

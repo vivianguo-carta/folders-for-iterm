@@ -13,14 +13,23 @@ from tabsidebar.sidebar import BadCommand, Sidebar
 
 log = logging.getLogger(__name__)
 
-STATIC_DIR = Path(__file__).parent / "static"
+PAGE_PATH = Path(__file__).parent / "static" / "index.html"
+VERSION_PLACEHOLDER = "__PAGE_VERSION__"
+
+
+def page_version() -> str:
+    """Changes whenever the page file changes, so open pages can tell they are out of date."""
+    stat = PAGE_PATH.stat()
+    return f"{stat.st_mtime_ns:x}-{stat.st_size:x}"
 
 
 def build_web_app(sidebar: Sidebar, origin: str, token: str) -> web.Application:
     """`origin` stops browser pages; `token`, known only to pages this process opened, stops local processes."""
 
-    async def index(_request: web.Request) -> web.FileResponse:
-        return web.FileResponse(STATIC_DIR / "index.html")
+    async def index(_request: web.Request) -> web.Response:
+        html = PAGE_PATH.read_text().replace(VERSION_PLACEHOLDER, page_version())
+        # iTerm2's web view otherwise keeps showing a cached page after the file changes.
+        return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-store"})
 
     async def websocket(request: web.Request) -> web.WebSocketResponse:
         if request.headers.get("Origin") != origin or not hmac.compare_digest(

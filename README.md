@@ -31,6 +31,8 @@ Group your iTerm2 tabs into folders, in a sidebar that lives in iTerm2's Toolbel
 
 - **+ Folder** adds a folder. Double-click a name or use **✎** to rename it, and **×** to delete it.
   Deleting a folder never closes tabs; they go back to Unsorted.
+- Double-click a tab to rename it in iTerm2 (Enter saves, Esc cancels). Clearing the name gives the tab back its
+  own title from iTerm2.
 - Drag a tab onto a folder to file it, or onto a tab in a folder to place it before that tab.
   Unsorted always follows iTerm2's tab order.
 - Click the dot next to a folder's name to give it a colour.

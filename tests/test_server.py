@@ -6,7 +6,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from fakes import FakeApp, FakeColorizer, FakeTab, SidebarWithoutWatchers
 from tabsidebar.model import FolderStore
-from tabsidebar.server import build_web_app
+from tabsidebar.server import build_web_app, page_version
 
 TOKEN = "per-run-secret"
 
@@ -17,6 +17,7 @@ def run_against_server(tmp_path, scenario):
         app=FakeApp(FakeTab("1", "-zsh")),
         store=FolderStore(tmp_path / "state.json"),
         colorizer=FakeColorizer(),
+        page_version=lambda: "v-test",
     )
 
     async def main():
@@ -72,3 +73,24 @@ def test_non_json_message_is_ignored_and_the_page_resynced(tmp_path):
         return reply["type"]
 
     assert run_against_server(tmp_path, scenario) == "tree"
+
+
+def test_the_page_is_served_uncached_and_stamped_with_its_current_version(tmp_path):
+    async def scenario(client):
+        response = await client.get("/")
+        return response.headers.get("Cache-Control"), await response.text()
+
+    cache_control, html = run_against_server(tmp_path, scenario)
+
+    assert cache_control == "no-store"
+    assert f'const PAGE_VERSION = "{page_version()}";' in html
+
+
+def test_every_update_tells_pages_the_current_page_version(tmp_path):
+    async def scenario(client):
+        ws = await client.ws_connect(f"/ws?token={TOKEN}", headers={"Origin": "http://127.0.0.1:47821"})
+        first = json.loads((await ws.receive()).data)
+        await ws.close()
+        return first["page_version"]
+
+    assert run_against_server(tmp_path, scenario) == "v-test"

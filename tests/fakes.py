@@ -14,6 +14,7 @@ class FakeTab:
         self.variables = {"title": title}
         self.sessions: list = []
         self.activated = False
+        self.title_override: str | None = None
         self.fail_next_read = False
 
     async def async_get_variable(self, name: str):
@@ -27,6 +28,9 @@ class FakeTab:
 
     async def async_activate(self, order_window_front: bool = True) -> None:
         self.activated = True
+
+    async def async_set_title(self, title: str) -> None:
+        self.title_override = title
 
 
 class FakeWindow:

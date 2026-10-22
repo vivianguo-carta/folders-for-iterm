@@ -18,6 +18,7 @@ from tabsidebar.titles import parse_title
 log = logging.getLogger(__name__)
 
 KEY_VARIABLE = "user.tabsidebar_key"
+MAX_TITLE_LENGTH = 200
 
 
 class BadCommand(ValueError):
@@ -40,11 +41,13 @@ class Sidebar:
         app: iterm2.App,
         store: FolderStore,
         colorizer: TabColorizer | None = None,
+        page_version: Callable[[], str] = lambda: "",
     ) -> None:
         self.connection = connection
         self.app = app
         self.store = store
         self.colorizer = colorizer or TabColorizer(app)
+        self.page_version = page_version
         self.live: list[LiveTab] = []
         self._clients: set[Client] = set()
         self._last_payload: str | None = None
@@ -55,6 +58,7 @@ class Sidebar:
         self._publish_lock = asyncio.Lock()
         self._commands: dict[str, Callable[[dict], Awaitable[None]]] = {
             "activate": self._activate,
+            "rename_tab": self._rename_tab,
             "create_folder": self._create_folder,
             "rename_folder": self._rename_folder,
             "delete_folder": self._delete_folder,
@@ -172,6 +176,7 @@ class Sidebar:
             "type": "tree",
             "folders": self.store.tree(self.live),
             "color_tabs": self.store.color_tabs,
+            "page_version": self.page_version(),
             "palette": {
                 "name": self.store.palette_name,
                 "colors": list(self.store.active_palette),
@@ -192,6 +197,17 @@ class Sidebar:
         tab = self.app.get_tab_by_id(command["tab_id"])
         if tab is not None:
             await tab.async_activate(order_window_front=True)
+
+    async def _rename_tab(self, command: dict) -> None:
+        """Sets the tab's title as iTerm2's Edit Tab Title does; an empty title restores iTerm2's own."""
+        title = command["title"]
+        if not isinstance(title, str) or len(title) > MAX_TITLE_LENGTH:
+            raise ValueError(f"tab title must be a string of at most {MAX_TITLE_LENGTH} characters")
+        tab = self.app.get_tab_by_id(command["tab_id"])
+        if tab is None:
+            raise KeyError(f"no open tab {command['tab_id']!r}")
+        # iTerm2 interpolates \(...) in titles; escaping backslashes keeps what was typed literal.
+        await tab.async_set_title(title.replace("\\", "\\\\"))
 
     async def _create_folder(self, command: dict) -> None:
         self.store.create_folder(str(command["name"]))

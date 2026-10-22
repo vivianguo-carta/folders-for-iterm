@@ -15,7 +15,7 @@ from aiohttp import web
 
 from tabsidebar import agent
 from tabsidebar.model import FolderStore
-from tabsidebar.server import build_web_app
+from tabsidebar.server import build_web_app, page_version
 from tabsidebar.sidebar import Sidebar
 from tabsidebar.toolbelt import register_toolbelt_tool
 
@@ -47,7 +47,7 @@ def load_or_create_token(path: Path) -> str:
 async def async_main(connection: iterm2.Connection) -> None:
     app = await iterm2.async_get_app(connection)
     token = load_or_create_token(TOKEN_PATH)
-    sidebar = Sidebar(connection, app, FolderStore(STATE_PATH))
+    sidebar = Sidebar(connection, app, FolderStore(STATE_PATH), page_version=page_version)
 
     # No access log: a page left open with an old link retries every second.
     runner = web.AppRunner(build_web_app(sidebar, ORIGIN, token), access_log=None)
