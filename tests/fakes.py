@@ -36,6 +36,11 @@ class FakeTab:
 class FakeWindow:
     def __init__(self, tabs: list[FakeTab]) -> None:
         self.tabs = tabs
+        self.reorders = 0
+
+    async def async_set_tabs(self, tabs) -> None:
+        self.tabs = list(tabs)
+        self.reorders += 1
 
 
 class FakeApp:

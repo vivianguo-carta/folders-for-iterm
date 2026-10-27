@@ -67,6 +67,7 @@
   #settings-panel h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
                        color: var(--muted); }
   .setting { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+  .setting + .setting { margin-top: 8px; }
   .setting-group + .setting-group { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hover); }
   .setting-label { font-size: 13px; margin-bottom: 6px; }
   .segmented { display: flex; border: 1px solid var(--muted); border-radius: 6px; overflow: hidden; }
@@ -115,6 +116,9 @@
     <label class="setting" title="Give each iTerm2 tab its folder's colour">
       <input type="checkbox" id="color-tabs"> Colour iTerm tabs by folder
     </label>
+    <label class="setting" title="Keep iTerm2's tab bar in the sidebar's order">
+      <input type="checkbox" id="order-tabs"> Order iTerm tabs like the sidebar
+    </label>
   </div>
 </div>
 <button id="settings-button" title="Settings" aria-controls="settings-panel" aria-expanded="false">⚙</button>
@@ -127,6 +131,7 @@ const COLLAPSED_KEY = "tabsidebar.collapsed";
 const treeEl = document.getElementById("tree");
 const statusEl = document.getElementById("status");
 const colorTabsEl = document.getElementById("color-tabs");
+const orderTabsEl = document.getElementById("order-tabs");
 const HEX = /^#[0-9a-fA-F]{6}$/;
 let ws;
 let folders = [];
@@ -161,6 +166,7 @@ function connect() {
       }
       folders = message.folders;
       colorTabsEl.checked = message.color_tabs;
+      orderTabsEl.checked = message.order_tabs;
       palette = message.palette;
       renderSettings();
       render();
@@ -336,6 +342,7 @@ function span(className, text) {
 
 
 colorTabsEl.onchange = () => send({ action: "set_color_tabs", enabled: colorTabsEl.checked });
+orderTabsEl.onchange = () => send({ action: "set_order_tabs", enabled: orderTabsEl.checked });
 
 const paletteButtons = document.querySelectorAll("[data-palette]");
 const customPaletteEl = document.getElementById("custom-palette");

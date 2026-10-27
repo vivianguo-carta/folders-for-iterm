@@ -57,6 +57,9 @@ tabsidebar install-agent
     its position in the palette, so switching palettes or editing a colour re-tints every folder that uses it.
   - **Colour iTerm tabs by folder** gives each tab in a coloured folder that colour in iTerm2's tab bar.
     Turning it off, or moving the tab out of the folder, restores the tab's own colour.
+  - **Order iTerm tabs like the sidebar** keeps each window's tabs in the sidebar's order: folders first, then
+    Unsorted. Dragging a tab in the sidebar moves it in iTerm2 too. Tabs never move to another window, and a filed
+    tab dragged elsewhere in iTerm2's tab bar moves back.
 
 ## Troubleshooting
 
@@ -92,6 +95,7 @@ rm -rf ~/Library/Application\ Support/tabsidebar
     after the sidebar restarts.
 - With **Colour iTerm tabs by folder** on, it changes tab colours for those sessions only; your iTerm2 profiles
   are not modified.
+- With **Order iTerm tabs like the sidebar** on, it reorders tabs within their windows.
 
 ## Development
 
@@ -103,8 +107,8 @@ uv run pytest       # tests
 
 - `daemon.py` connects to iTerm2, serves the page, registers it in the Toolbelt, and exits when the iTerm2
   connection ends. It also holds the command line.
-- `sidebar.py` keeps the tree in sync with iTerm2 and handles page commands. It is the only writer of tab colours
-  and page updates, one publish at a time.
+- `sidebar.py` keeps the tree in sync with iTerm2 and handles page commands. It is the only writer of tab colours,
+  tab order and page updates, one publish at a time.
 - `server.py` serves the page (`static/index.html`) and its websocket. `toolbelt.py` registers the page with
   iTerm2. `agent.py` installs the login agent.
 - `model.py` (folders, palettes and settings), `titles.py` (Claude Code status) and `tabcolors.py` hold the logic,

@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from fakes import FakeApp, FakeColorizer, FakeTab, RecordingClient, SidebarWithoutWatchers
+from fakes import FakeApp, FakeColorizer, FakeTab, FakeWindow, RecordingClient, SidebarWithoutWatchers
 from tabsidebar.model import FolderStore
 from tabsidebar.sidebar import BadCommand
 
@@ -111,6 +111,60 @@ def test_publishes_from_commands_and_refreshes_never_overlap(tmp_path):
     asyncio.run(scenario())
 
     assert sidebar.colorizer.max_in_flight == 1
+
+
+def iterm_order(sidebar):
+    return [[t.tab_id for t in w.tabs] for w in sidebar.app.terminal_windows]
+
+
+def file_last_tab_into_a_new_folder(sidebar):
+    async def scenario():
+        await refresh_once(sidebar)
+        await sidebar.handle_command({"action": "create_folder", "name": "api"})
+        folder_id = sidebar.store.folders[0].id
+        await sidebar.handle_command({"action": "move_tab", "key": sidebar.live[-1].key, "folder_id": folder_id})
+
+    asyncio.run(scenario())
+
+
+def test_filing_a_tab_moves_it_first_in_iterm_when_ordering_is_on(tmp_path):
+    sidebar = make_sidebar(tmp_path, FakeTab("1", "a"), FakeTab("2", "b"), FakeTab("3", "c"))
+    sidebar.store.set_order_tabs(True)
+
+    file_last_tab_into_a_new_folder(sidebar)
+
+    assert iterm_order(sidebar) == [["3", "1", "2"]]
+
+
+def test_iterm_tab_order_is_left_alone_when_ordering_is_off(tmp_path):
+    sidebar = make_sidebar(tmp_path, FakeTab("1", "a"), FakeTab("2", "b"), FakeTab("3", "c"))
+
+    file_last_tab_into_a_new_folder(sidebar)
+
+    assert iterm_order(sidebar) == [["1", "2", "3"]]
+    assert sidebar.app.terminal_windows[0].reorders == 0
+
+
+def test_ordering_keeps_tabs_in_their_own_window(tmp_path):
+    sidebar = make_sidebar(tmp_path)
+    sidebar.app.terminal_windows = [
+        FakeWindow([FakeTab("1", "a"), FakeTab("2", "b")]),
+        FakeWindow([FakeTab("3", "c"), FakeTab("4", "d")]),
+    ]
+    sidebar.store.set_order_tabs(True)
+
+    file_last_tab_into_a_new_folder(sidebar)
+
+    assert iterm_order(sidebar) == [["1", "2"], ["4", "3"]]
+
+
+def test_a_window_already_in_order_is_not_reordered(tmp_path):
+    sidebar = make_sidebar(tmp_path, FakeTab("1", "a"), FakeTab("2", "b"))
+    sidebar.store.set_order_tabs(True)
+
+    asyncio.run(refresh_once(sidebar))
+
+    assert sidebar.app.terminal_windows[0].reorders == 0
 
 
 def test_activate_switches_to_the_clicked_tab(tmp_path):

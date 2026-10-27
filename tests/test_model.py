@@ -110,6 +110,26 @@ def test_coloring_toggle_survives_reload(tmp_path):
     assert FolderStore(path).color_tabs is True
 
 
+def test_ordering_toggle_survives_reload(tmp_path):
+    path = tmp_path / "state.json"
+
+    FolderStore(path).set_order_tabs(True)
+
+    assert FolderStore(path).order_tabs is True
+
+
+def test_tab_order_lists_folders_in_order_then_unsorted_in_iterm_order(tmp_path):
+    store = FolderStore(tmp_path / "state.json")
+    api, web = store.create_folder("api"), store.create_folder("web")
+    store.move_tab("c", web.id)
+    store.move_tab("d", api.id)
+    store.move_tab("b", api.id, before_key="d")
+
+    order = store.tab_order([tab("a"), tab("b"), tab("c"), tab("d"), tab("e")])
+
+    assert order == ["id-b", "id-d", "id-c", "id-a", "id-e"]
+
+
 def test_tabs_take_their_folder_color_only_when_coloring_is_enabled(tmp_path):
     store = FolderStore(tmp_path / "state.json")
     api = store.create_folder("api")
@@ -214,13 +234,14 @@ def test_loaded_values_that_fail_validation_fall_back_to_defaults(tmp_path):
         "palette": "neon",
         "custom_palette": ["#000000", "red"],
         "color_tabs": "yes",
+        "order_tabs": 1,
     }))
 
     store = FolderStore(path)
 
     assert (store.folders[0].tab_keys, store.folders[0].color_slot) == (["a"], None)
     assert (store.palette_name, store.custom_palette) == ("default", list(DEFAULT_PALETTE))
-    assert store.color_tabs is False
+    assert (store.color_tabs, store.order_tabs) == (False, False)
 
 
 def test_switching_palettes_retints_folders_by_slot(tmp_path):

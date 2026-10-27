@@ -30,7 +30,7 @@ class Client(Protocol):
 
 
 class Sidebar:
-    """Single writer of iTerm2 tab colors and of what the pages see.
+    """Single writer of iTerm2 tab colors and order, and of what the pages see.
 
     Every change, whether from iTerm2 or from a page, goes through `_publish`, which runs one at a time.
     """
@@ -65,6 +65,7 @@ class Sidebar:
             "move_tab": self._move_tab,
             "set_folder_color": self._set_folder_color,
             "set_color_tabs": self._set_color_tabs,
+            "set_order_tabs": self._set_order_tabs,
             "set_palette": self._set_palette,
             "set_custom_color": self._set_custom_color,
             "reset_custom_palette": self._reset_custom_palette,
@@ -164,6 +165,8 @@ class Sidebar:
     async def _publish(self) -> None:
         async with self._publish_lock:
             await self.colorizer.apply(self.store.tab_colors(self.live))
+            if self.store.order_tabs:
+                await self._arrange_tabs(self.store.tab_order(self.live))
             payload = self._payload()
             if payload == self._last_payload:
                 return  # e.g. a spinner frame: the title changed but what the page shows did not
@@ -171,11 +174,21 @@ class Sidebar:
             for client in list(self._clients):
                 await self._send(client, payload)
 
+    async def _arrange_tabs(self, tab_ids: list[str]) -> None:
+        """Sorts each window's tabs into `tab_ids` order; tabs never move to another window."""
+        rank = {tab_id: i for i, tab_id in enumerate(tab_ids)}
+        for window in self.app.terminal_windows:
+            # Tabs opened since the last refresh are not ranked yet; they stay at the end until it lists them.
+            wanted = sorted(window.tabs, key=lambda tab: rank.get(tab.tab_id, len(rank)))
+            if [t.tab_id for t in wanted] != [t.tab_id for t in window.tabs]:
+                await window.async_set_tabs(wanted)
+
     def _payload(self) -> str:
         return json.dumps({
             "type": "tree",
             "folders": self.store.tree(self.live),
             "color_tabs": self.store.color_tabs,
+            "order_tabs": self.store.order_tabs,
             "page_version": self.page_version(),
             "palette": {
                 "name": self.store.palette_name,
@@ -228,6 +241,9 @@ class Sidebar:
 
     async def _set_color_tabs(self, command: dict) -> None:
         self.store.set_color_tabs(command["enabled"] is True)
+
+    async def _set_order_tabs(self, command: dict) -> None:
+        self.store.set_order_tabs(command["enabled"] is True)
 
     async def _set_palette(self, command: dict) -> None:
         self.store.set_palette(command["name"])

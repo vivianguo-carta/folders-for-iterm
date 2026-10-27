@@ -68,6 +68,7 @@ class FolderStore:
         self.path = path
         self.folders: list[Folder] = []
         self.color_tabs = False
+        self.order_tabs = False
         self.palette_name = PALETTE_DEFAULT
         self.custom_palette = list(DEFAULT_PALETTE)
         self._seen_keys: set[str] = set()
@@ -86,6 +87,7 @@ class FolderStore:
             return
         self.folders = folders
         self.color_tabs = raw.get("color_tabs") is True
+        self.order_tabs = raw.get("order_tabs") is True
         if raw.get("palette") in PALETTE_NAMES:
             self.palette_name = raw["palette"]
         custom = raw.get("custom_palette")
@@ -99,6 +101,7 @@ class FolderStore:
         data = {
             "folders": [vars(f) for f in self.folders],
             "color_tabs": self.color_tabs,
+            "order_tabs": self.order_tabs,
             "palette": self.palette_name,
             "custom_palette": self.custom_palette,
         }
@@ -147,6 +150,10 @@ class FolderStore:
 
     def set_color_tabs(self, enabled: bool) -> None:
         self.color_tabs = enabled
+        self.save()
+
+    def set_order_tabs(self, enabled: bool) -> None:
+        self.order_tabs = enabled
         self.save()
 
     def delete_folder(self, folder_id: str) -> None:
@@ -202,6 +209,10 @@ class FolderStore:
                 for tab in group.tabs:
                     colors[tab.tab_id] = group.color
         return colors
+
+    def tab_order(self, live: list[LiveTab]) -> list[str]:
+        """Open tab ids in the order the sidebar lists them."""
+        return [tab.tab_id for group in self.groups(live) for tab in group.tabs]
 
     def _color_of(self, folder: Folder) -> str | None:
         return None if folder.color_slot is None else self.active_palette[folder.color_slot]
