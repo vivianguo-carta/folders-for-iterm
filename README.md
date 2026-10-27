@@ -19,7 +19,7 @@ terminal left running.
 
 1. Install the `tabsidebar` command:
    ```sh
-   uv tool install git+https://github.com/vvscribbles/folders-for-iterm
+   uv tool install git+https://github.com/vivianguo-carta/folders-for-iterm
    ```
 2. In iTerm2, turn on **Settings → General → Magic → Enable Python API**.
 3. Install the login agent, which starts the sidebar now and keeps it running:
@@ -37,7 +37,7 @@ terminal or quit iTerm2. Stop it before installing the agent, or the agent finds
 The agent runs the installed copy, so reinstall it and restart the agent:
 
 ```sh
-uv tool install --reinstall git+https://github.com/vvscribbles/folders-for-iterm
+uv tool install --reinstall git+https://github.com/vivianguo-carta/folders-for-iterm
 tabsidebar install-agent
 ```
 
@@ -100,7 +100,7 @@ rm -rf ~/Library/Application\ Support/tabsidebar
 ## Development
 
 ```sh
-git clone https://github.com/vvscribbles/folders-for-iterm && cd folders-for-iterm
+git clone https://github.com/vivianguo-carta/folders-for-iterm && cd folders-for-iterm
 uv run tabsidebar   # run from the checkout
 uv run pytest       # tests
 ```
